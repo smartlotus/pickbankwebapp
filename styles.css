@@ -537,7 +537,7 @@ h3 {
   max-width: 100%;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
 }
 

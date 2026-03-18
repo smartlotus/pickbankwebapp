@@ -265,6 +265,8 @@
 
   let deferredInstallPromptEvent = null;
   let installPromptTimer = null;
+  let homeBudgetCardObserver = null;
+  let homeBudgetFitRaf = null;
 
   if (elements.splash) {
     document.body.classList.add("splash-active", "app-revealing");
@@ -640,6 +642,22 @@
     document.getElementById("exportBtn").addEventListener("click", exportSummaryData);
   }
 
+  function scheduleHomeBudgetFit() {
+    cancelAnimationFrame(homeBudgetFitRaf);
+    homeBudgetFitRaf = requestAnimationFrame(fitHomeBudgetCard);
+  }
+
+  function observeHomeBudgetCard(card) {
+    if (!card || typeof ResizeObserver === "undefined") return;
+    if (!homeBudgetCardObserver) {
+      homeBudgetCardObserver = new ResizeObserver(() => {
+        scheduleHomeBudgetFit();
+      });
+    }
+    homeBudgetCardObserver.disconnect();
+    homeBudgetCardObserver.observe(card);
+  }
+
   function fitHomeBudgetCard() {
     const card = elements.home.querySelector(".home-budget-card");
     if (!card) return;
@@ -656,28 +674,27 @@
 
     const styles = window.getComputedStyle(layout);
     const gap = parseFloat(styles.columnGap || styles.gap || "12") || 12;
-    const textWidth = value.scrollWidth;
+    const textWidth = Math.max(value.scrollWidth, value.getBoundingClientRect().width);
     const ringWidth = ring.getBoundingClientRect().width;
 
     if (!textWidth || !ringWidth) return;
 
     let valueScale = 1;
     let ringScale = 1;
+    const minValueScale = 0.18;
+    const minRingScale = 0.45;
 
     if (textWidth + ringWidth + gap > availableWidth) {
-      const targetTextWidth = Math.max(availableWidth - ringWidth - gap, 84);
-      valueScale = Math.max(0.42, Math.min(1, targetTextWidth / textWidth));
+      const availableForTextWithMinRing = Math.max(availableWidth - gap - ringWidth * minRingScale, 0);
+      valueScale = Math.max(minValueScale, Math.min(1, availableForTextWithMinRing / textWidth));
 
-      const scaledTextWidth = textWidth * valueScale;
-      const targetRingWidth = Math.max(68, availableWidth - scaledTextWidth - gap);
-      ringScale = Math.max(0.62, Math.min(1, targetRingWidth / ringWidth));
+      const availableForRing = Math.max(availableWidth - gap - textWidth * valueScale, 0);
+      ringScale = Math.max(minRingScale, Math.min(1, availableForRing / ringWidth));
 
-      const stillOverflow = scaledTextWidth + ringWidth * ringScale + gap - availableWidth;
-      if (stillOverflow > 0) {
-        valueScale = Math.max(
-          0.36,
-          Math.min(valueScale, (availableWidth - ringWidth * ringScale - gap) / Math.max(textWidth, 1))
-        );
+      const currentTotal = textWidth * valueScale + ringWidth * ringScale + gap;
+      if (currentTotal > availableWidth) {
+        const overflow = currentTotal - availableWidth;
+        valueScale = Math.max(minValueScale, valueScale - overflow / Math.max(textWidth, 1));
       }
     }
 
@@ -751,6 +768,8 @@
       </section>
     `;
 
+    observeHomeBudgetCard(elements.home.querySelector(".home-budget-card"));
+
     const quickInput = document.getElementById("quickInput");
     quickInput.addEventListener("input", () => {
       state.ui.quickInputText = quickInput.value;
@@ -779,7 +798,7 @@
     });
 
     fitHomeBudgetCard();
-    requestAnimationFrame(fitHomeBudgetCard);
+    scheduleHomeBudgetFit();
   }
 
   function getTimeRange(period) {
@@ -2318,7 +2337,7 @@
       applyDisplayModeLayout();
       scheduleLayoutSync();
       if (state.activeTab === "home") {
-        requestAnimationFrame(fitHomeBudgetCard);
+        scheduleHomeBudgetFit();
       }
     });
     window.addEventListener(
@@ -2334,7 +2353,12 @@
       dismissSplash(false);
     });
     if (document.fonts && document.fonts.ready) {
-      document.fonts.ready.then(scheduleLayoutSync).catch(() => {});
+      document.fonts.ready
+        .then(() => {
+          scheduleLayoutSync();
+          if (state.activeTab === "home") scheduleHomeBudgetFit();
+        })
+        .catch(() => {});
     }
   }
 

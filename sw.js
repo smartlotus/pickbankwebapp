@@ -1,4 +1,4 @@
-const CACHE_NAME = "pickbank-pwa-v17-20260317-logo-install";
+const CACHE_NAME = "pickbank-pwa-v18-20260318-budget-autofit";
 const ASSETS = [
   "./",
   "./index.html",
