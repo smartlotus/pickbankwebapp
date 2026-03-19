@@ -6,6 +6,7 @@
   const DAY_MS = 86400000;
   const INSTALL_PROMPT_SEEN_KEY = "pickbank_install_prompt_seen_v1";
   const INSTALL_PROMPT_DELAY_MS = 2800;
+  const AI_PROXY_PATH = "/api/chat";
   const THEME_PALETTES = {
     MONO: ["#f4f4f4", "#d9d9d9", "#bdbdbd", "#9f9f9f", "#838383", "#6a6a6a", "#555555", "#3f3f3f"],
     WARM: ["#ffab91", "#a5d6a7", "#ffe082", "#90caf9", "#ce93d8", "#80cbc4", "#f48fb1", "#bcaaa4"]
@@ -2048,11 +2049,24 @@
     }
   }
 
-  async function callChatApi(messages, maxTokens, baseUrl, apiKey, model) {
-    const safeBase = String(baseUrl || "").trim().replace(/\/+$/, "");
-    if (!safeBase) throw new Error("Base URL missing");
-    if (!apiKey) throw new Error("API key missing");
+  function isLocalDevHost() {
+    const hostname = window.location.hostname || "";
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "";
+  }
 
+  async function extractChatContentFromResponse(resp) {
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => "");
+      throw new Error(`HTTP ${resp.status} ${text.slice(0, 160)}`.trim());
+    }
+
+    const data = await resp.json();
+    const msg = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+    if (!msg) throw new Error("Empty AI response");
+    return msg;
+  }
+
+  async function callChatApiDirect(messages, maxTokens, safeBase, apiKey, model) {
     const resp = await fetch(`${safeBase}/v1/chat/completions`, {
       method: "POST",
       headers: {
@@ -2067,15 +2081,43 @@
       })
     });
 
-    if (!resp.ok) {
-      const text = await resp.text().catch(() => "");
-      throw new Error(`HTTP ${resp.status} ${text.slice(0, 140)}`.trim());
+    return extractChatContentFromResponse(resp);
+  }
+
+  async function callChatApiViaProxy(messages, maxTokens, safeBase, apiKey, model) {
+    const resp = await fetch(AI_PROXY_PATH, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        baseUrl: safeBase,
+        apiKey,
+        model: model || "deepseek-chat",
+        messages,
+        maxTokens: maxTokens || 256
+      })
+    });
+
+    return extractChatContentFromResponse(resp);
+  }
+
+  async function callChatApi(messages, maxTokens, baseUrl, apiKey, model) {
+    const safeBase = String(baseUrl || "").trim().replace(/\/+$/, "");
+    if (!safeBase) throw new Error("Base URL missing");
+    if (!apiKey) throw new Error("API key missing");
+
+    try {
+      return await callChatApiViaProxy(messages, maxTokens, safeBase, apiKey, model);
+    } catch (err) {
+      const msg = String(err && err.message ? err.message : "");
+      const proxyMissing = /HTTP 404|HTTP 405|Failed to fetch|Unexpected token </i.test(msg);
+      if (!isLocalDevHost() || !proxyMissing) {
+        throw err;
+      }
     }
 
-    const data = await resp.json();
-    const msg = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
-    if (!msg) throw new Error("Empty AI response");
-    return msg;
+    return callChatApiDirect(messages, maxTokens, safeBase, apiKey, model);
   }
 
   function sleep(ms) {

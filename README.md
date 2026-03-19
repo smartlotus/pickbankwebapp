@@ -20,5 +20,6 @@ Open `http://localhost:8080` in Safari.
 ## Notes
 
 - Local data is stored in browser storage.
-- AI requests are sent directly from browser to the configured provider (`/v1/chat/completions`).
+- In production on Cloudflare Pages, AI requests are forwarded through the local Pages Function endpoint at `/api/chat` to avoid browser CORS issues.
+- Local static preview without Pages Functions falls back to direct browser requests to the configured provider (`/v1/chat/completions`).
 - HTTPS is required for full PWA behavior in production.

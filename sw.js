@@ -1,4 +1,4 @@
-const CACHE_NAME = "pickbank-pwa-v18-20260318-budget-autofit";
+const CACHE_NAME = "pickbank-pwa-v19-20260319-ai-proxy-fix";
 const ASSETS = [
   "./",
   "./index.html",
